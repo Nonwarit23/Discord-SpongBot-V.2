@@ -4,8 +4,9 @@ from discord.ext import commands
 from discord import app_commands
 from mysever import server_on
 import asyncio
+import yt_dlp  # <--- เพิ่มบรรทัดนี้
+import sqlite3
 
-# Channel IDs
 schedule = 1502332277072597052
 announcement_channel_id = 1502331959517384828
 s_output = 1502332037917573261
@@ -18,6 +19,32 @@ VERIFIED_ROLE_ID = 1502531862739030157
 # Bot Setup
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='/', intents=intents)
+
+def init_db():
+    conn = sqlite3.connect('music_stats.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS music_stats (
+            url TEXT PRIMARY KEY,
+            title TEXT,
+            play_count INTEGER DEFAULT 1
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def update_stats(title, url):
+    conn = sqlite3.connect('music_stats.db')
+    cursor = conn.cursor()
+    # ใช้ logic: ถ้ามี URL เดิมให้เพิ่ม count (UPSERT)
+    cursor.execute('''
+        INSERT INTO music_stats (url, title, play_count)
+        VALUES (?, ?, 1)
+        ON CONFLICT(url) DO UPDATE SET 
+            play_count = play_count + 1
+    ''', (url, title))
+    conn.commit()
+    conn.close()
 
 # --- Check Function ---
 def is_command_channel():
@@ -146,6 +173,22 @@ class PollView(discord.ui.View):
             embed.add_field(name=f"🔹 {opt}", value=f"{bar} **{count}** votes ({percentage:.1f}%)", inline=False)
         embed.set_footer(text=f"Total Voters: {total_votes} | Last update: {interaction.user.display_name}")
         await interaction.response.edit_message(embed=embed, view=self)
+# --- Song ---
+
+class FavoriteSongsSelect(discord.ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder="เลือกเพลงที่คุณฟังบ่อย...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        # ในที่นี้คือการเรียกฟังก์ชันเล่นเพลง (สมมติว่าชื่อ play_logic)
+        url = self.values[0]
+        await interaction.response.send_message(f"กำลังเล่นเพลงจากรายการโปรด: {url}")
+        # เพิ่ม code สั่งให้ Bot เข้าห้องและเล่นเพลงตรงนี้
+
+class RecommendView(discord.ui.View):
+    def __init__(self, options):
+        super().__init__()
+        self.add_item(FavoriteSongsSelect(options))
 
 # --- Events ---
 
@@ -232,9 +275,10 @@ async def poll(interaction: discord.Interaction, question: str, options: str):
 
 @bot.tree.command(name='announce', description="ส่งประกาศเปิดห้อง (Thumbnail เป็นรูปเซิร์ฟเวอร์)")
 @is_command_channel()
-async def announce_room(interaction: discord.Interaction, room_name: str, type: str, time_s: str, time_t: str, link: str, des: str):
+async def announce_room(interaction: discord.Interaction, type: str, room_name: str, time_s: str, time_t: str, link: str, des: str):
     channel = bot.get_channel(announcement_channel_id)
-    
+    channel_a = bot.get_channel(schedule)
+
     # ดึง URL รูปไอคอนของเซิร์ฟเวอร์ (ถ้าไม่มีจะใช้ None)
     server_icon = interaction.guild.icon.url if interaction.guild.icon else None
     
@@ -267,8 +311,64 @@ async def announce_room(interaction: discord.Interaction, room_name: str, type: 
         icon_url=interaction.user.display_avatar.url
     )
 
+    embed1 = discord.Embed(
+        title=f"# 📆Schedule\n## 📂 TOPIC: {type}\n" + "—" * 25,
+        description=des,
+        color=0xB22222
+    )
+
+    embed.add_field(name="📍 LOCATION", value=f"```\n{room_name}\n```", inline=False)
+    embed.add_field(name="⏰ DURATION", value=f"⏳ **{time_s}** - **{time_t}**", inline=True)
+
+    if link != '-':
+        embed1.add_field(name="📃 DOCUMENT", value=f"🔗 [คลิกชมเอกสาร]({link})", inline=True)
+    else:
+        embed1.add_field(name="📃 DOCUMENT", value='-', inline=True)
+
+    await channel.send(embed=embed)
+    await channel_a.send(embed=embed1)
+    await interaction.response.send_message("✅ ส่งประกาศสำเร็จ", ephemeral=True)
+
+async def announce_normal(interaction: discord.Interaction, topic: str, who: str, time_s: str, content: str, link: str, des_link: str):
+    channel = bot.get_channel(announcement_channel_id)
+    
+    # ดึง URL รูปไอคอนของเซิร์ฟเวอร์ (ถ้าไม่มีจะใช้ None)
+    server_icon = interaction.guild.icon.url if interaction.guild.icon else None
+    
+    # สร้าง Embed แบบจัดเต็ม
+    embed = discord.Embed(
+    title=f"# 📢 ANNOUNCEMENT\n## 📂 TOPIC: {type}\n" + "—" * 25,
+    description="ประกาศ",
+    color=0xFF2056,  # Added the missing comma here
+)
+
+
+    # 1. ใส่รูปมุมขวาบนเป็นรูปเซิร์ฟเวอร์
+    if server_icon:
+        embed.set_thumbnail(url=server_icon)
+
+    # 2. ข้อมูลหลัก
+    embed.add_field(name="  To", value=f"```\n{who}\n```", inline=False)
+    embed.add_field(name=" ", value=" ", inline=False)
+    embed.add_field(name="  ", value=f"```\n{content}\n```", inline=False)
+    if link != '-':
+        embed.add_field(name="📃 DOCUMENT", value=f"🔗 [คลิกชมเอกสาร]({link})", inline=False)
+    else:
+        embed.add_field(name="📃 DOCUMENT", value='-', inline=False)
+    
+    # 3. รายละเอียด (ใช้ช่องสีเทา fix ให้ดูเด่น)
+    embed.add_field(name="Link detall", value=f"```fix\n{des_link}\n```", inline=False)
+
+    # 4. ส่วนท้าย (บอกว่าใครเป็นคนประกาศ)
+    embed.set_footer(
+        text=f"Announced by {interaction.user.display_name} • {interaction.guild.name}", 
+        icon_url=interaction.user.display_avatar.url,
+        timestamp=discord.utils.utcnow()
+    )
+
     await channel.send(embed=embed)
     await interaction.response.send_message("✅ ส่งประกาศสำเร็จ", ephemeral=True)
+
 
 @bot.tree.command(name='timer', description="ตั้งเวลาถอยหลัง")
 @is_command_channel()
