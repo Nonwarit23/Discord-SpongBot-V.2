@@ -4,7 +4,6 @@ from discord.ext import commands
 from discord import app_commands
 from mysever import server_on
 import asyncio
-import yt_dlp  # <--- เพิ่มบรรทัดนี้
 import sqlite3
 
 schedule = 1502332277072597052
@@ -173,23 +172,6 @@ class PollView(discord.ui.View):
             embed.add_field(name=f"🔹 {opt}", value=f"{bar} **{count}** votes ({percentage:.1f}%)", inline=False)
         embed.set_footer(text=f"Total Voters: {total_votes} | Last update: {interaction.user.display_name}")
         await interaction.response.edit_message(embed=embed, view=self)
-# --- Song ---
-
-class FavoriteSongsSelect(discord.ui.Select):
-    def __init__(self, options):
-        super().__init__(placeholder="เลือกเพลงที่คุณฟังบ่อย...", options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        # ในที่นี้คือการเรียกฟังก์ชันเล่นเพลง (สมมติว่าชื่อ play_logic)
-        url = self.values[0]
-        await interaction.response.send_message(f"กำลังเล่นเพลงจากรายการโปรด: {url}")
-        # เพิ่ม code สั่งให้ Bot เข้าห้องและเล่นเพลงตรงนี้
-
-class RecommendView(discord.ui.View):
-    def __init__(self, options):
-        super().__init__()
-        self.add_item(FavoriteSongsSelect(options))
-
 # --- Events ---
 
 @bot.event
