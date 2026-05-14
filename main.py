@@ -255,7 +255,7 @@ async def poll(interaction: discord.Interaction, question: str, options: str):
     await channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ สร้างโหวตสำเร็จ", ephemeral=True)
 
-@bot.tree.command(name='announce', description="ส่งประกาศเปิดห้อง (Thumbnail เป็นรูปเซิร์ฟเวอร์)")
+@bot.tree.command(name='announce_room', description="ส่งประกาศเปิดห้อง (Thumbnail เป็นรูปเซิร์ฟเวอร์)พร้อมตั้งเวลาในช่อง schedule")
 @is_command_channel()
 async def announce_room(interaction: discord.Interaction, type: str, room_name: str, time_s: str, time_t: str, link: str, des: str):
     channel = bot.get_channel(announcement_channel_id)
@@ -311,6 +311,9 @@ async def announce_room(interaction: discord.Interaction, type: str, room_name: 
     await channel_a.send(embed=embed1)
     await interaction.response.send_message("✅ ส่งประกาศสำเร็จ", ephemeral=True)
 
+
+@bot.tree.command(name='announce_normal', description="ส่งประกาศ (Thumbnail เป็นรูปเซิร์ฟเวอร์)")
+@is_command_channel()
 async def announce_normal(interaction: discord.Interaction, topic: str, who: str, time_s: str, content: str, link: str, des_link: str):
     channel = bot.get_channel(announcement_channel_id)
     
