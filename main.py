@@ -249,26 +249,55 @@ async def poll(interaction: discord.Interaction, question: str, options: str):
     await channel.send(embed=embed, view=PollView(option_list, interaction.user))
     await interaction.followup.send("✅ Poll created.", ephemeral=True)
 
-@bot.tree.command(name='announce_room', description="Announce room opening")
+@bot.tree.command(name='announce_room', description="Announce room opening to Announcement and Schedule channels")
 @is_command_channel()
 async def announce_room(interaction: discord.Interaction, type: str, room_name: str, time_start: str, time_end: str, link: str, description: str):
+    # Defer immediately to prevent response timeout
     await interaction.response.defer(ephemeral=True)
+    
     ann_channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
     sch_channel = bot.get_channel(SCHEDULE_CHANNEL_ID)
     
-    embed = discord.Embed(title=f"# 📢 ANNOUNCEMENT\n## 📂 TOPIC: {type}", color=0xFF2056)
-    embed.add_field(name="📍 LOCATION", value=f"```\n{room_name}\n```", inline=False)
-    embed.add_field(name="⏰ TIME", value=f"⏳ **{time_start}** - **{time_end}**", inline=True)
-    embed.add_field(name="📃 DOCUMENT", value=f"🔗 [Link]({link})" if link != '-' else '-', inline=True)
-    embed.add_field(name="🎯 INFO", value=f"```fix\n{description}\n```", inline=False)
+    # 1. Prepare Main Announcement Embed
+    embed = discord.Embed(title=f"# 📢 ROOM OPENING\n## 📂 CATEGORY: {type}", color=0xFF2056)
+    embed.add_field(name="📍 LOCATION / ROOM", value=f"```\n{room_name}\n```", inline=False)
+    embed.add_field(name="⏰ DURATION", value=f"⏳ **{time_start}** - **{time_end}**", inline=True)
+    embed.add_field(name="📃 ATTACHMENT", value=f"🔗 [Open Document]({link})" if link != '-' else '-', inline=True)
+    embed.add_field(name="🎯 DESCRIPTION", value=f"```fix\n{description}\n```", inline=False)
+    embed.set_footer(text=f"Announced by {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
 
-    sch_embed = discord.Embed(title=f"# 📆 Schedule: {type}", description=description, color=0xB22222)
-    sch_embed.add_field(name="📍 LOCATION", value=room_name)
-    sch_embed.add_field(name="⏰ TIME", value=f"{time_start} - {time_end}")
+    # 2. Prepare Schedule Log Embed
+    sch_embed = discord.Embed(title=f"📆 New Schedule Added: {type}", description=description, color=0xB22222)
+    sch_embed.add_field(name="📍 Location", value=f"`{room_name}`", inline=True)
+    sch_embed.add_field(name="⏰ Time", value=f"`{time_start} - {time_end}`", inline=True)
+    sch_embed.set_timestamp()
 
-    if ann_channel: await ann_channel.send(embed=embed)
-    if sch_channel: await sch_channel.send(embed=sch_embed)
-    await interaction.followup.send("✅ Room announced.", ephemeral=True)
+    errors = []
+    
+    # Send to Announcement Channel
+    if ann_channel:
+        try:
+            await ann_channel.send(embed=embed)
+        except Exception as e:
+            errors.append(f"Announcement: {e}")
+    else:
+        errors.append("Announcement channel not found.")
+
+    # Send to Schedule Channel
+    if sch_channel:
+        try:
+            await sch_channel.send(embed=sch_embed)
+        except Exception as e:
+            errors.append(f"Schedule: {e}")
+    else:
+        errors.append("Schedule channel not found.")
+
+    # Final Feedback
+    if not errors:
+        await interaction.followup.send("✅ Room announced successfully in both channels!", ephemeral=True)
+    else:
+        error_msg = "\n".join(errors)
+        await interaction.followup.send(f"⚠️ Sent with errors:\n{error_msg}", ephemeral=True)
 
 @bot.tree.command(name='announce_normal', description="General announcement")
 @is_command_channel()
